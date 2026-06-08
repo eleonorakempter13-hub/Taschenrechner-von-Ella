@@ -1,0 +1,290 @@
+Hier ist eine funktionsfähige Ein-Datei-Version des Taschenrechners, bei dem jede Taste automatisch eine eigene Farbe erhält. Speichere den Inhalt als z. B. index.html und öffne ihn im Browser.
+
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Taschenrechner – Bunte Tasten</title>
+  <style>
+    :root { --bg:#0f0f11; --panel:#1a1c20; --text:#ffffff; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; display: grid; place-items: center;
+      background: radial-gradient(1000px 600px at 20% 10%, #1c1f26, #0f0f11);
+      color: var(--text); font-family: system-ui, Arial, sans-serif;
+    }
+    .calc {
+      width: 340px; background: var(--panel); border-radius: 14px;
+      box-shadow: 0 14px 40px rgba(0,0,0,.45); overflow: hidden;
+      border: 1px solid rgba(255,255,255,.06);
+    }
+    .display {
+      padding: 18px 16px; background: #0d0f12; text-align: right; min-height: 78px;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .prev { opacity: .7; font-size: 14px; min-height: 18px; }
+    .curr { font-size: 30px; font-weight: 650; word-wrap: break-word; }
+    .keys {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 14px;
+    }
+    button {
+      border: none; color: var(--text); padding: 16px; font-size: 18px;
+      border-radius: 12px; cursor: pointer; user-select: none;
+      transition: transform .05s ease, filter .15s ease, box-shadow .15s ease;
+      box-shadow: 0 6px 14px rgba(0,0,0,.22), inset 0 -2px 0 rgba(255,255,255,.12);
+    }
+    button:active { transform: translateY(1px) scale(.99); filter: brightness(.95); }
+    .wide { grid-column: span 2; }
+    .footer {
+      text-align: center; font-size: 12px; opacity: .6; padding: 4px 0 10px;
+    }
+    /* Bessere Fokussichtbarkeit */
+    button:focus-visible {
+      outline: 3px solid rgba(255,255,255,.6);
+      outline-offset: 2px;
+    }
+  </style>
+</head>
+<body>
+  <div class="calc">
+    <div class="display">
+      <div class="prev" id="prev"></div>
+      <div class="curr" id="curr">0</div>
+    </div>
+    <div class="keys" id="keys">
+      <button data-action="clear" title="Esc">C</button>
+      <button data-action="delete" title="Backspace">←</button>
+      <button data-action="percent" title="%">%</button>
+      <button data-op="/" title="Division">÷</button>
+
+      <button data-num="7">7</button>
+      <button data-num="8">8</button>
+      <button data-num="9">9</button>
+      <button data-op="*" title="Multiplikation">×</button>
+
+      <button data-num="4">4</button>
+      <button data-num="5">5</button>
+      <button data-num="6">6</button>
+      <button data-op="-" title="Minus">−</button>
+
+      <button data-num="1">1</button>
+      <button data-num="2">2</button>
+      <button data-num="3">3</button>
+      <button data-op="+" title="Plus">+</button>
+
+      <button data-num="0" class="wide">0</button>
+      <button data-num=".">.</button>
+      <button data-action="equals" title="Enter">=</button>
+
+      <button data-action="negate" class="wide" title="+/−">+/−</button>
+    </div>
+    <div class="footer"></div>
+  </div>
+
+  <script>
+    (function () {
+      const prevEl = document.getElementById('prev');
+      const currEl = document.getElementById('curr');
+      const keysEl = document.getElementById('keys');
+
+      let current = '';
+      let previous = '';
+      let operation = null;
+      let overwrite = false; // nach Gleich: nächste Zahl überschreibt
+
+      function formatNumber(nStr) {
+        if (nStr === '' || nStr === '-') return nStr || '0';
+        const [int, dec] = nStr.split('.');
+        const intFmt = Number(int).toLocaleString('de-DE');
+        return dec !== undefined ? `${intFmt},${dec}` : intFmt;
+      }
+
+      function opSymbol(op) {
+        return { '/': '÷', '*': '×', '+': '+', '-': '−' }[op] || op;
+      }
+
+      function updateDisplay() {
+        currEl.textContent = current ? formatNumber(current) : '0';
+        prevEl.textContent = operation && previous
+          ? `${formatNumber(previous)} ${opSymbol(operation)}`
+          : '';
+      }
+
+      function clearAll() {
+        current = '';
+        previous = '';
+        operation = null;
+        overwrite = false;
+        updateDisplay();
+      }
+
+      function deleteOne() {
+        if (overwrite) { current = ''; overwrite = false; }
+        else current = current.slice(0, -1);
+        updateDisplay();
+      }
+
+      function appendNumber(n) {
+        if (overwrite) { current = ''; overwrite = false; }
+        if (n === '.' && current.includes('.')) return;
+        if (n === '.' && current === '') current = '0.';
+        else current += n;
+        // Führende Null vermeiden
+        if (/^0\d/.test(current)) current = String(parseFloat(current));
+        updateDisplay();
+      }
+
+      function chooseOperation(op) {
+        if (!current && !previous) return;
+        if (!current && previous) { operation = op; updateDisplay(); return; }
+        if (previous) compute();
+        previous = current || previous;
+        current = '';
+        operation = op;
+        overwrite = false;
+        updateDisplay();
+      }
+
+      function compute() {
+        if (!operation || previous === '' || current === '') return;
+        const a = parseFloat(previous);
+        const b = parseFloat(current);
+        let res;
+        switch (operation) {
+          case '+': res = a + b; break;
+          case '-': res = a - b; break;
+          case '*': res = a * b; break;
+          case '/':
+            if (b === 0) { showError(); return; }
+            res = a / b; break;
+          default: return;
+        }
+        current = stripFloat(res);
+        previous = '';
+        operation = null;
+        overwrite = true;
+        updateDisplay();
+      }
+
+      function percent() {
+        if (!current) return;
+        let val = parseFloat(current);
+        if (previous && operation) {
+          const a = parseFloat(previous);
+          if (operation === '+' || operation === '-') {
+            val = a * (val / 100);
+          } else {
+            val = val / 100;
+          }
+        } else {
+          val = val / 100;
+        }
+        current = stripFloat(val);
+        updateDisplay();
+      }
+
+      function negate() {
+        if (!current) return;
+        if (current.startsWith('-')) current = current.slice(1);
+        else current = '-' + current;
+        updateDisplay();
+      }
+
+      function stripFloat(num) {
+        const s = Number(num.toFixed(12)).toString(); // begrenzt Rundungsfehler
+        return s;
+      }
+
+      function showError() {
+        current = '';
+        previous = '';
+        operation = null;
+        overwrite = false;
+        currEl.textContent = 'Fehler';
+        prevEl.textContent = '';
+      }
+
+      // Maus-/Touch-Eingaben
+      keysEl.addEventListener('click', (e) => {
+        const btn = e.target.closest('button');
+        if (!btn) return;
+        const num = btn.getAttribute('data-num');
+        const op = btn.getAttribute('data-op');
+        const action = btn.getAttribute('data-action');
+
+        if (num !== null) return appendNumber(num);
+        if (op) return chooseOperation(op);
+        if (action === 'clear') return clearAll();
+        if (action === 'delete') return deleteOne();
+        if (action === 'equals') return compute();
+        if (action === 'percent') return percent();
+        if (action === 'negate') return negate();
+      });
+
+      // Tastatur-Eingaben
+      window.addEventListener('keydown', (e) => {
+        const k = e.key;
+        if (/\d/.test(k)) return appendNumber(k);
+        if (k === '.' || k === ',') { e.preventDefault(); return appendNumber('.'); }
+        if (['+', '-', '*', '/'].includes(k)) return chooseOperation(k);
+        if (k === '%') return percent();
+        if (k === 'Enter' || k === '=') { e.preventDefault(); return compute(); }
+        if (k === 'Backspace') return deleteOne();
+        if (k === 'Escape') return clearAll();
+        if (k === '_') return negate();
+      });
+
+      // Bunte Farben für jede Taste (gleichmäßig verteilte Hues)
+      function colorizeButtons() {
+        const buttons = [...keysEl.querySelectorAll('button')];
+        const n = buttons.length;
+        // Golden-Angle-Verteilung für angenehme Farben
+        let hue = Math.random() * 360;
+        const golden = 137.508; // Grad
+        buttons.forEach((btn, i) => {
+          hue = (hue + golden) % 360;
+          const sat = 70; // %
+          const light = 50; // %
+          const bg = `hsl(${hue} ${sat}% ${light}%)`;
+          btn.style.backgroundColor = bg;
+
+          // Kontrastfarbe für Text (YIQ-Heuristik)
+          const rgb = hslToRgb(hue / 360, sat / 100, light / 100);
+          const yiq = (rgb[0]*299 + rgb[1]*587 + rgb[2]*114) / 1000;
+          btn.style.color = yiq >= 150 ? '#111' : '#fff';
+
+          // Leichter Hover-Effekt
+          btn.addEventListener('mouseenter', () => btn.style.filter = 'brightness(1.06)');
+          btn.addEventListener('mouseleave', () => btn.style.filter = 'none');
+        });
+      }
+
+      function hslToRgb(h, s, l) {
+        if (s === 0) {
+          const v = Math.round(l * 255);
+          return [v, v, v];
+        }
+        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        const p = 2 * l - q;
+        const r = hue2rgb(p, q, h + 1/3);
+        const g = hue2rgb(p, q, h);
+        const b = hue2rgb(p, q, h - 1/3);
+        return [Math.round(r*255), Math.round(g*255), Math.round(b*255)];
+      }
+      function hue2rgb(p, q, t) {
+        if (t < 0) t += 1;
+        if (t > 1) t -= 1;
+        if (t < 1/6) return p + (q - p) * 6 * t;
+        if (t < 1/2) return q;
+        if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+        return p;
+      }
+
+      // Initialisieren
+      updateDisplay();
+      colorizeButtons();
+    })();
+  </script>
+</body>
+</html>
